@@ -7,27 +7,15 @@ from config import TenantConfig
 
 def inject(body: dict, tenant: TenantConfig) -> dict:
     """
-    1. 校验 model 字段存在，且在 tenant.allowed_models ∩ upstream.available_models 中
+    1. 校验请求限制（消息数、字符数）
     2. 移除所有 role=system 的 message
-    3. 在 messages 头部插入 tenant 配置的 system_prompt
+    3. 注入 agent 的 system_prompt 和 glossary
+       - glossary_mode="system_message"（默认）：注入为 system message
+       - glossary_mode="translation_options"：注入为 translation_options.terms 列表
+    4. 强制使用 agent.model，合并 agent.extra_body（agent 优先）
     返回修改后的 body（浅拷贝，messages 列表为新对象）
     """
-    model = body.get("model")
-    if not model:
-        raise HTTPException(status_code=400, detail="Field 'model' is required.")
-
-    if model not in tenant.allowed_models:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Model '{model}' is not in your allowed_models: {tenant.allowed_models}",
-        )
-
-    if model not in tenant.upstream.available_models:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Model '{model}' is not available in upstream '{tenant.upstream_id}'.",
-        )
-
+    agent = tenant.agent
     raw_messages = body.get("messages", [])
 
     if tenant.max_user_messages is not None:
@@ -48,30 +36,49 @@ def inject(body: dict, tenant: TenantConfig) -> dict:
 
     messages = [m for m in raw_messages if m.get("role") != "system"]
 
-    if tenant.system_prompt:
-        messages = [{"role": "system", "content": tenant.system_prompt}] + messages
+    if agent.system_prompt:
+        messages = [{"role": "system", "content": agent.system_prompt}] + messages
 
-    if tenant.glossary:
+    # Glossary injection
+    glossary_terms: list[dict] | None = None
+    if agent.glossary:
         user_text = " ".join(
             m["content"] for m in messages
             if m.get("role") == "user" and isinstance(m.get("content"), str)
         )
-        matches = tenant.glossary.find_matches(user_text)
+        matches = agent.glossary.find_matches(user_text)
         if matches:
-            glossary_msg = tenant.glossary.build_system_message(matches)
-            # 插入在主 system prompt 之后，对话消息之前
-            insert_pos = 1 if tenant.system_prompt else 0
-            messages.insert(insert_pos, {"role": "system", "content": glossary_msg})
+            if agent.glossary_mode == "translation_options":
+                # qwen-mt mode: build {source, target} pairs (include all variant forms)
+                seen: set[str] = set()
+                glossary_terms = []
+                for t in matches:
+                    for form in t.all_forms():
+                        if form not in seen:
+                            glossary_terms.append({"source": form, "target": t.chinese})
+                            seen.add(form)
+            else:
+                # Standard mode: inject matched terms as a system message
+                glossary_msg = agent.glossary.build_system_message(matches)
+                insert_pos = 1 if agent.system_prompt else 0
+                messages.insert(insert_pos, {"role": "system", "content": glossary_msg})
 
-    # 移除 Anthropic 格式的 thinking 字段，统一转换为 enable_thinking
-    result = {k: v for k, v in body.items() if k not in ("messages", "thinking")}
+    # 从客户端 body 复制其他字段，排除 messages / thinking / model
+    result = {k: v for k, v in body.items() if k not in ("messages", "thinking", "model")}
+    # agent.extra_body 优先（覆盖同名客户端字段）
+    result.update(agent.extra_body)
+    # agent.model 强制覆盖
+    result["model"] = agent.model
     result["messages"] = messages
 
-    if tenant.disable_thinking is not None:
-        # 配置强制覆盖
-        result["enable_thinking"] = not tenant.disable_thinking
+    # 将匹配到的术语追加进 translation_options.terms
+    if glossary_terms is not None:
+        result["translation_options"] = {**result.get("translation_options", {}), "terms": glossary_terms}
+
+    # 移除 Anthropic 格式的 thinking 字段，统一转换为 enable_thinking
+    if agent.disable_thinking is not None:
+        result["enable_thinking"] = not agent.disable_thinking
     else:
-        # 透传客户端设置：解析 thinking: {type: "enabled"/"disabled"}
         thinking = body.get("thinking")
         if isinstance(thinking, dict):
             result["enable_thinking"] = thinking.get("type") == "enabled"

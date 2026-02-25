@@ -30,7 +30,7 @@ def _parse_sse_content(chunk: bytes) -> str:
 
 
 async def forward(body: dict, tenant: TenantConfig) -> StreamingResponse | JSONResponse:
-    upstream = tenant.upstream
+    upstream = tenant.agent.upstream
     headers = {
         "Authorization": f"Bearer {upstream.api_key}",
         "Content-Type": "application/json",

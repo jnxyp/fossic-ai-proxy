@@ -8,7 +8,7 @@ import pytest
 from fastapi.responses import JSONResponse
 
 from config import AppConfig
-from tests.conftest import MOCK_RESPONSE_DATA, make_tenant, make_upstream
+from tests.conftest import MOCK_RESPONSE_DATA, make_agent, make_tenant, make_upstream
 
 
 VALID_BODY = {
@@ -52,9 +52,8 @@ def test_missing_auth_returns_403(api_client):
 
 # ── referer ───────────────────────────────────────────────────────────────────
 
-def test_allowed_referer_passes(api_client, app_cfg, mock_forward):
-    up = make_upstream()
-    t = make_tenant(up, allowed_referers=["https://example.com/"])
+def test_allowed_referer_passes(api_client, app_cfg, upstream, mock_forward):
+    t = make_tenant(make_agent(upstream), allowed_referers=["https://example.com/"])
     app_cfg.tenants["sk-valid-key"] = t
     resp = api_client.post(
         "/v1/chat/completions",
@@ -64,9 +63,8 @@ def test_allowed_referer_passes(api_client, app_cfg, mock_forward):
     assert resp.status_code == 200
 
 
-def test_blocked_referer_returns_403(api_client, app_cfg):
-    up = make_upstream()
-    t = make_tenant(up, allowed_referers=["https://example.com/"])
+def test_blocked_referer_returns_403(api_client, app_cfg, upstream):
+    t = make_tenant(make_agent(upstream), allowed_referers=["https://example.com/"])
     app_cfg.tenants["sk-valid-key"] = t
     resp = api_client.post(
         "/v1/chat/completions",
@@ -76,9 +74,8 @@ def test_blocked_referer_returns_403(api_client, app_cfg):
     assert resp.status_code == 403
 
 
-def test_no_referer_blocked_when_referer_required(api_client, app_cfg):
-    up = make_upstream()
-    t = make_tenant(up, allowed_referers=["https://example.com/"])
+def test_no_referer_blocked_when_referer_required(api_client, app_cfg, upstream):
+    t = make_tenant(make_agent(upstream), allowed_referers=["https://example.com/"])
     app_cfg.tenants["sk-valid-key"] = t
     resp = api_client.post(
         "/v1/chat/completions",
@@ -99,27 +96,28 @@ def test_no_referer_restriction_passes_without_referer(api_client, mock_forward)
 
 # ── request validation ────────────────────────────────────────────────────────
 
-def test_missing_model_returns_400(api_client):
+def test_no_model_field_still_succeeds(api_client, mock_forward):
+    """Agent provides model, so client doesn't need to send it."""
     resp = api_client.post(
         "/v1/chat/completions",
         headers={"Authorization": "Bearer sk-valid-key"},
         json={"messages": [{"role": "user", "content": "hi"}]},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
 
 
-def test_disallowed_model_returns_400(api_client):
+def test_wrong_model_overridden_by_agent(api_client, mock_forward):
+    """Client's model is ignored; agent model is always used."""
     resp = api_client.post(
         "/v1/chat/completions",
         headers={"Authorization": "Bearer sk-valid-key"},
         json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
 
 
-def test_too_many_user_messages_returns_400(api_client, app_cfg):
-    up = make_upstream()
-    t = make_tenant(up, max_user_messages=1)
+def test_too_many_user_messages_returns_400(api_client, app_cfg, upstream):
+    t = make_tenant(make_agent(upstream), max_user_messages=1)
     app_cfg.tenants["sk-valid-key"] = t
     resp = api_client.post(
         "/v1/chat/completions",
@@ -135,9 +133,8 @@ def test_too_many_user_messages_returns_400(api_client, app_cfg):
     assert resp.status_code == 400
 
 
-def test_too_many_chars_returns_400(api_client, app_cfg):
-    up = make_upstream()
-    t = make_tenant(up, max_chars=5)
+def test_too_many_chars_returns_400(api_client, app_cfg, upstream):
+    t = make_tenant(make_agent(upstream), max_chars=5)
     app_cfg.tenants["sk-valid-key"] = t
     resp = api_client.post(
         "/v1/chat/completions",
@@ -207,6 +204,4 @@ def test_proxy_reject_returns_403(api_client):
             headers={"Authorization": "Bearer sk-valid-key"},
             json=VALID_BODY,
         )
-    # forward returns the reject response; rejection detection is in proxy._non_stream
-    # This tests that a 403 from forward propagates correctly
-    assert resp.status_code in (200, 403)  # depends on whether mock bypasses detection
+    assert resp.status_code in (200, 403)

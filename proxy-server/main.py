@@ -28,7 +28,8 @@ async def lifespan(app: FastAPI):
     app_config = load_config("config.yaml")
     set_level(app_config.log_level)
     tenant_count = len({t.name for t in app_config.tenants.values()})
-    log.info(f"loaded {tenant_count} tenant(s), {len(app_config.upstreams)} upstream(s), log_level={app_config.log_level.upper()}")
+    log.info(f"loaded {tenant_count} tenant(s), {len(app_config.agents)} agent(s), "
+             f"{len(app_config.upstreams)} upstream(s), log_level={app_config.log_level.upper()}")
     yield
 
 
@@ -89,7 +90,7 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
     input_chars = sum(len(m.get("content", "")) for m in body.get("messages", []) if isinstance(m.get("content"), str))
     is_stream = modified_body.get("stream", False)
 
-    log.info(f"[{tenant.name}] -> {tenant.upstream_id}/{model} | msgs={len(user_msgs)} chars={input_chars} stream={is_stream}")
+    log.info(f"[{tenant.name}] -> {tenant.agent_id}/{model} | msgs={len(user_msgs)} chars={input_chars} stream={is_stream}")
     log.debug(f"[{tenant.name}] received body")
     log.debug(json.dumps(body, ensure_ascii=False))
     log.debug(f"[{tenant.name}] injected body")
@@ -99,7 +100,7 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
     response = await forward(modified_body, tenant)
     elapsed = time.monotonic() - t0
 
-    log.info(f"[{tenant.name}] <- {tenant.upstream_id}/{model} | {elapsed:.2f}s")
+    log.info(f"[{tenant.name}] <- {tenant.agent_id}/{model} | {elapsed:.2f}s")
 
     origin = request.headers.get("origin", "")
     cors = _cors_headers(origin, tenant)

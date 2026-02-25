@@ -1,30 +1,34 @@
+log_level: "info"  # debug | info | warning
+
 upstreams:
   - id: "openai-main"
     url: "https://api.openai.com/v1/chat/completions"
-    api_key: "sk-openai-xxx"
+    api_key: "sk-xxxxxxxx"
     available_models:
       - "gpt-4o"
       - "gpt-4o-mini"
 
-  - id: "deepseek"
-    url: "https://api.deepseek.com/v1/chat/completions"
-    api_key: "sk-deepseek-xxx"
-    available_models:
-      - "deepseek-chat"
-      - "deepseek-reasoner"
-
-users:
-  - key: "sk-user-alice-xxxx"
-    name: "alice"
+agents:
+  - id: "starsector-translator"
     upstream_id: "openai-main"
-    allowed_models:
-      - "gpt-4o-mini"
-    system_prompt_file: "alice.txt"   # 从 prompts/alice.txt 读取
+    model: "gpt-4o-mini"
+    system_prompt_file: "starsector-zh.txt"   # prompts/ 目录下的提示词文件
+    glossary_file: "starsector-terms.json"    # glossary/ 目录下的术语表
+    disable_thinking: true                    # 可选，强制关闭/开启 thinking
+    # extra_body:                             # 可选，合并进请求体（agent 优先）
+    #   translation_options:
+    #     source_lang: "English"
+    #     target_lang: "Chinese"
 
-  - key: "sk-user-bob-xxxx"
-    name: "bob"
-    upstream_id: "deepseek"
-    allowed_models:
-      - "deepseek-chat"
-      - "deepseek-reasoner"
-    system_prompt: "You are Bob's coding assistant. Always respond in English."  # 也可直接内联
+tenants:
+  - keys:
+      - "sk-translator-xxx"       # 分发给客户端的 Key（可配置多个）
+      - "sk-translator-yyy"
+    name: "translator"
+    agent_id: "starsector-translator"
+    cors_origins:
+      - "https://paratranz.cn"
+    allowed_referers:
+      - "https://paratranz.cn/"
+    max_user_messages: 1
+    max_chars: 5000

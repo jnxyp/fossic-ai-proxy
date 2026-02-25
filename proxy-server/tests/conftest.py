@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 
-from config import AppConfig, TenantConfig, UpstreamConfig
+from config import AgentConfig, AppConfig, TenantConfig, UpstreamConfig
 from glossary import Glossary, GlossaryLoader, GlossaryTerm
 
 
@@ -21,22 +21,34 @@ def make_upstream(id="test-upstream", models=None) -> UpstreamConfig:
     )
 
 
-def make_tenant(upstream: UpstreamConfig, **kwargs) -> TenantConfig:
+def make_agent(upstream: UpstreamConfig, **kwargs) -> AgentConfig:
+    defaults = dict(
+        id="test-agent",
+        upstream_id=upstream.id,
+        model="model-a",
+        system_prompt="You are a translator.",
+        glossary=None,
+        disable_thinking=None,
+        extra_body={},
+    )
+    defaults.update(kwargs)
+    a = AgentConfig(**defaults)
+    a.upstream = upstream
+    return a
+
+
+def make_tenant(agent: AgentConfig, **kwargs) -> TenantConfig:
     defaults = dict(
         name="test-tenant",
-        upstream_id=upstream.id,
-        allowed_models=["model-a"],
-        system_prompt="You are a translator.",
+        agent_id=agent.id,
         cors_origins=["https://example.com"],
         allowed_referers=[],
         max_user_messages=None,
         max_chars=None,
-        disable_thinking=None,
-        glossary=None,
     )
     defaults.update(kwargs)
     t = TenantConfig(**defaults)
-    t.upstream = upstream
+    t.agent = agent
     return t
 
 
@@ -86,14 +98,20 @@ def upstream():
 
 
 @pytest.fixture
-def tenant(upstream):
-    return make_tenant(upstream)
+def agent(upstream):
+    return make_agent(upstream)
 
 
 @pytest.fixture
-def app_cfg(upstream, tenant):
+def tenant(agent):
+    return make_tenant(agent)
+
+
+@pytest.fixture
+def app_cfg(upstream, agent, tenant):
     return AppConfig(
         upstreams={upstream.id: upstream},
+        agents={agent.id: agent},
         tenants={"sk-valid-key": tenant},
         log_level="info",
     )
