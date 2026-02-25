@@ -8,7 +8,9 @@ from typing import Optional
 import yaml
 
 from glossary import Glossary, load_glossary_csv
+from logger import get_logger
 
+log = get_logger()
 PROMPTS_DIR = Path("prompts")
 
 
@@ -49,7 +51,7 @@ def _load_glossary(u: dict, name: str) -> Optional[Glossary]:
     try:
         return load_glossary_csv(glossary_file)
     except FileNotFoundError:
-        print(f"[config] ERROR: tenant '{name}' glossary_file '{glossary_file}' not found in glossary/", file=sys.stderr)
+        log.error(f"tenant '{name}' glossary_file '{glossary_file}' not found in glossary/")
         sys.exit(1)
 
 
@@ -58,7 +60,7 @@ def _load_prompt(u: dict, name: str) -> str:
     if prompt_file:
         file_path = PROMPTS_DIR / prompt_file
         if not file_path.exists():
-            print(f"[config] ERROR: tenant '{name}' system_prompt_file '{file_path}' not found", file=sys.stderr)
+            log.error(f"tenant '{name}' system_prompt_file '{file_path}' not found")
             sys.exit(1)
         return file_path.read_text(encoding="utf-8").strip()
     return u.get("system_prompt", "")
@@ -83,12 +85,12 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         name = t.get("name", "?")
 
         if upstream_id not in upstreams:
-            print(f"[config] ERROR: tenant '{name}' references unknown upstream_id '{upstream_id}'", file=sys.stderr)
+            log.error(f"tenant '{name}' references unknown upstream_id '{upstream_id}'")
             sys.exit(1)
 
         keys = t.get("keys", [])
         if not keys:
-            print(f"[config] ERROR: tenant '{name}' has no keys defined", file=sys.stderr)
+            log.error(f"tenant '{name}' has no keys defined")
             sys.exit(1)
 
         system_prompt = _load_prompt(t, name)
@@ -107,13 +109,11 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         )
         tenant.upstream = upstreams[upstream_id]
 
-        # 校验 allowed_models 是 available_models 的子集
         invalid = set(tenant.allowed_models) - set(tenant.upstream.available_models)
         if invalid:
-            print(
-                f"[config] ERROR: tenant '{name}' allowed_models {invalid} "
-                f"not in upstream '{upstream_id}' available_models",
-                file=sys.stderr,
+            log.error(
+                f"tenant '{name}' allowed_models {invalid} "
+                f"not in upstream '{upstream_id}' available_models"
             )
             sys.exit(1)
 

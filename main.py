@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 import time
 from contextlib import asynccontextmanager
 
@@ -13,14 +12,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import db
 from config import AppConfig, TenantConfig, load_config
 from injector import inject
+from logger import get_logger, set_level
 from proxy import forward, _parse_sse_content
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-log = logging.getLogger("fossic-ai-proxy")
+log = get_logger()
 
 app_config: AppConfig | None = None
 bearer = HTTPBearer()
@@ -31,7 +26,7 @@ async def lifespan(app: FastAPI):
     global app_config
     db.init_db()
     app_config = load_config("config.yaml")
-    logging.getLogger().setLevel(app_config.log_level.upper())
+    set_level(app_config.log_level)
     tenant_count = len({t.name for t in app_config.tenants.values()})
     log.info(f"loaded {tenant_count} tenant(s), {len(app_config.upstreams)} upstream(s), log_level={app_config.log_level.upper()}")
     yield
