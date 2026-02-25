@@ -90,8 +90,10 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
     is_stream = modified_body.get("stream", False)
 
     log.info(f"[{tenant.name}] -> {tenant.upstream_id}/{model} | msgs={len(user_msgs)} chars={input_chars} stream={is_stream}")
-    log.debug(f"[{tenant.name}] received body:\n{json.dumps(body, ensure_ascii=False, indent=2)}")
-    log.debug(f"[{tenant.name}] injected body:\n{json.dumps(modified_body, ensure_ascii=False, indent=2)}")
+    log.debug(f"[{tenant.name}] received body")
+    log.debug(json.dumps(body, ensure_ascii=False))
+    log.debug(f"[{tenant.name}] injected body")
+    log.debug(json.dumps(modified_body, ensure_ascii=False))
 
     t0 = time.monotonic()
     response = await forward(modified_body, tenant)
