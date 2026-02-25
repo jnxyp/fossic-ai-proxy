@@ -103,7 +103,7 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
     log.debug(json.dumps(modified_body, ensure_ascii=False))
 
     t0 = time.monotonic()
-    response = await forward(modified_body, tenant)
+    response = await forward(modified_body, tenant, effective_agent)
     elapsed = time.monotonic() - t0
 
     log.info(f"[{tenant.name}] <- {tenant.agent_id}/{model} | {elapsed:.2f}s")

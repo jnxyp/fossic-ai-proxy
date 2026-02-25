@@ -6,10 +6,22 @@ import httpx
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from config import TenantConfig
+from config import AgentConfig, TenantConfig
 
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)
 REJECT_MARKER = "PROXY_REJECT:"
+
+
+def _meta_text(agent: AgentConfig) -> str:
+    return f"[proxy: agent={agent.id} model={agent.model} upstream={agent.upstream.id}]\n\n"
+
+
+def _meta_sse_chunk(agent: AgentConfig) -> bytes:
+    data = {
+        "id": "proxy-meta",
+        "choices": [{"index": 0, "delta": {"reasoning_content": _meta_text(agent)}, "finish_reason": None}],
+    }
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode()
 
 
 def _parse_sse_content(chunk: bytes) -> str:
@@ -29,8 +41,9 @@ def _parse_sse_content(chunk: bytes) -> str:
     return text
 
 
-async def forward(body: dict, tenant: TenantConfig) -> StreamingResponse | JSONResponse:
-    upstream = tenant.agent.upstream
+async def forward(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -> StreamingResponse | JSONResponse:
+    effective = agent or tenant.agent
+    upstream = effective.upstream
     headers = {
         "Authorization": f"Bearer {upstream.api_key}",
         "Content-Type": "application/json",
@@ -39,21 +52,20 @@ async def forward(body: dict, tenant: TenantConfig) -> StreamingResponse | JSONR
     is_stream = body.get("stream", False)
 
     if is_stream:
-        return await _stream_response(upstream.url, headers, body)
+        return await _stream_response(upstream.url, headers, body, effective)
     else:
-        return await _non_stream(upstream.url, headers, body)
+        return await _non_stream(upstream.url, headers, body, effective)
 
 
-async def _non_stream(url: str, headers: dict, body: dict) -> JSONResponse:
+async def _non_stream(url: str, headers: dict, body: dict, agent: AgentConfig | None = None) -> JSONResponse:
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         resp = await client.post(url, headers=headers, json=body)
     if resp.status_code != 200:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
 
     data = resp.json()
-    content = (data.get("choices", [{}])[0]
-               .get("message", {})
-               .get("content", "") or "")
+    message = data.get("choices", [{}])[0].get("message", {})
+    content = message.get("content", "") or ""
 
     if isinstance(content, str) and content.startswith(REJECT_MARKER):
         reason_str = content[len(REJECT_MARKER):]
@@ -63,10 +75,16 @@ async def _non_stream(url: str, headers: dict, body: dict) -> JSONResponse:
             reason = "请求被拒绝"
         raise HTTPException(status_code=403, detail=reason)
 
+    if agent is not None:
+        meta = _meta_text(agent)
+        existing_rc = message.get("reasoning_content") or ""
+        message["reasoning_content"] = meta + existing_rc
+        data["choices"][0]["message"] = message
+
     return JSONResponse(content=data, status_code=200)
 
 
-async def _stream_response(url: str, headers: dict, body: dict) -> StreamingResponse | JSONResponse:
+async def _stream_response(url: str, headers: dict, body: dict, agent: AgentConfig) -> StreamingResponse | JSONResponse:
     """
     Start the streaming request, buffer the beginning to detect PROXY_REJECT,
     then either raise HTTPException or return a StreamingResponse.
@@ -109,9 +127,10 @@ async def _stream_response(url: str, headers: dict, body: dict) -> StreamingResp
             reason = "请求被拒绝"
         raise HTTPException(status_code=403, detail=reason)
 
-    # Not a rejection — yield buffered chunks then continue from the same iterator
+    # Not a rejection — yield meta chunk first, then buffered chunks, then the rest
     async def gen():
         try:
+            yield _meta_sse_chunk(agent)
             for chunk in buffered_chunks:
                 yield chunk
             async for chunk in raw_iter:
