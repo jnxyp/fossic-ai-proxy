@@ -29,6 +29,8 @@ class UserConfig:
     system_prompt: str
     cors_origins: list[str] = field(default_factory=list)
     allowed_referers: list[str] = field(default_factory=list)
+    max_user_messages: Optional[int] = None
+    max_chars: Optional[int] = None
     disable_thinking: bool = False
     glossary: Optional[Glossary] = None
     upstream: UpstreamConfig = field(init=False)
@@ -91,6 +93,8 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             allowed_models=u.get("allowed_models", []),
             cors_origins=u.get("cors_origins", []),
             allowed_referers=u.get("allowed_referers", []),
+            max_user_messages=u.get("max_user_messages"),
+            max_chars=u.get("max_chars"),
             disable_thinking=u.get("disable_thinking", False),
             system_prompt=system_prompt,
             glossary=glossary,

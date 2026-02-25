@@ -28,7 +28,25 @@ def inject(body: dict, user: UserConfig) -> dict:
             detail=f"Model '{model}' is not available in upstream '{user.upstream_id}'.",
         )
 
-    messages = [m for m in body.get("messages", []) if m.get("role") != "system"]
+    raw_messages = body.get("messages", [])
+
+    if user.max_user_messages is not None:
+        user_msg_count = sum(1 for m in raw_messages if m.get("role") == "user")
+        if user_msg_count > user.max_user_messages:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Too many user messages: {user_msg_count} (max {user.max_user_messages}).",
+            )
+
+    if user.max_chars is not None:
+        total_chars = sum(len(m.get("content", "")) for m in raw_messages if isinstance(m.get("content"), str))
+        if total_chars > user.max_chars:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Request too long: {total_chars} chars (max {user.max_chars}).",
+            )
+
+    messages = [m for m in raw_messages if m.get("role") != "system"]
 
     if user.system_prompt:
         messages = [{"role": "system", "content": user.system_prompt}] + messages
