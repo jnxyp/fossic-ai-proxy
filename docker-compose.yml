@@ -1,11 +1,22 @@
+name: fossic-ai-proxy
+
 services:
-  proxy:
-    build: .
+  proxy-server:
+    build: ./proxy-server
     ports:
       - "18080:18080"
     volumes:
-      - ./config.yaml:/app/config.yaml:ro
-      - ./prompts:/app/prompts:ro
-      - ./glossary:/app/glossary:ro
-      - ./data:/app/data
+      - ./proxy-server/config.yaml:/app/config.yaml:ro
+      - ./proxy-server/prompts:/app/prompts:ro
+      - ./proxy-server/glossary:/app/glossary:ro
+      - ./proxy-server/data:/app/data
     restart: unless-stopped
+
+  terms-fetcher:
+    build: ./terms-fetcher
+    volumes:
+      - ./terms-fetcher/config.yaml:/app/config.yaml:ro
+      - ./proxy-server/glossary:/app/glossary
+    restart: unless-stopped
+    depends_on:
+      - proxy-server

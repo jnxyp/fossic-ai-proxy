@@ -1,8 +1,11 @@
 """Tests for glossary matching and message building."""
 from __future__ import annotations
 
+import json
+import time
+
 import pytest
-from glossary import Glossary, GlossaryTerm
+from glossary import Glossary, GlossaryLoader, GlossaryTerm
 from tests.conftest import make_glossary
 
 
@@ -103,3 +106,64 @@ def test_build_message_has_header():
     matches = g.find_matches("flux")
     msg = g.build_system_message(matches)
     assert "术语" in msg
+
+
+# ── GlossaryLoader ────────────────────────────────────────────────────────────
+
+def _write_json(path, terms: list[dict]) -> None:
+    path.write_text(
+        json.dumps({"updatedAt": "2024-01-01T00:00:00Z", "terms": terms}),
+        encoding="utf-8",
+    )
+
+
+def test_loader_returns_empty_when_file_missing(tmp_path):
+    loader = GlossaryLoader(tmp_path / "nonexistent.json")
+    assert loader.find_matches("flux") == []
+    assert loader.build_system_message([]) == ""
+
+
+def test_loader_loads_on_first_use(tmp_path):
+    path = tmp_path / "terms.json"
+    _write_json(path, [{"term": "flux", "translation": "幅能", "note": ""}])
+    loader = GlossaryLoader(path)
+    matches = loader.find_matches("flux levels")
+    assert len(matches) == 1
+    assert matches[0].english == "flux"
+
+
+def test_loader_reloads_when_file_changes(tmp_path):
+    path = tmp_path / "terms.json"
+    _write_json(path, [{"term": "flux", "translation": "幅能", "note": ""}])
+    loader = GlossaryLoader(path)
+    loader.find_matches("flux")  # initial load
+
+    # Overwrite with new content; bump mtime by modifying the file
+    time.sleep(0.01)  # ensure mtime differs
+    _write_json(path, [{"term": "shield", "translation": "护盾", "note": ""}])
+    # Touch the file to guarantee a different mtime on fast filesystems
+    path.touch()
+
+    assert loader.find_matches("shield damage") != []
+    assert loader.find_matches("flux levels") == []
+
+
+def test_loader_skips_terms_missing_translation(tmp_path):
+    path = tmp_path / "terms.json"
+    _write_json(path, [
+        {"term": "flux", "translation": "", "note": ""},
+        {"term": "shield", "translation": "护盾", "note": ""},
+    ])
+    loader = GlossaryLoader(path)
+    matches = loader.find_matches("flux and shield")
+    assert len(matches) == 1
+    assert matches[0].english == "shield"
+
+
+def test_loader_builds_system_message(tmp_path):
+    path = tmp_path / "terms.json"
+    _write_json(path, [{"term": "flux", "translation": "幅能", "note": ""}])
+    loader = GlossaryLoader(path)
+    matches = loader.find_matches("flux")
+    msg = loader.build_system_message(matches)
+    assert "flux → 幅能" in msg

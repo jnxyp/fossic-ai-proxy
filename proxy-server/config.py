@@ -7,7 +7,7 @@ from typing import Optional
 
 import yaml
 
-from glossary import Glossary, load_glossary_csv
+from glossary import GlossaryLoader, make_glossary_loader
 from logger import get_logger
 
 log = get_logger()
@@ -33,7 +33,7 @@ class TenantConfig:
     max_user_messages: Optional[int] = None
     max_chars: Optional[int] = None
     disable_thinking: Optional[bool] = None
-    glossary: Optional[Glossary] = None
+    glossary: Optional[GlossaryLoader] = None
     upstream: UpstreamConfig = field(init=False)
 
 
@@ -44,15 +44,13 @@ class AppConfig:
     log_level: str = "info"
 
 
-def _load_glossary(u: dict, name: str) -> Optional[Glossary]:
+def _load_glossary(u: dict, name: str) -> Optional[GlossaryLoader]:
     glossary_file = u.get("glossary_file")
     if not glossary_file:
         return None
-    try:
-        return load_glossary_csv(glossary_file)
-    except FileNotFoundError:
-        log.error(f"tenant '{name}' glossary_file '{glossary_file}' not found in glossary/")
-        sys.exit(1)
+    loader = make_glossary_loader(glossary_file)
+    log.info(f"tenant '{name}' glossary registered: {glossary_file} (loaded on first use)")
+    return loader
 
 
 def _load_prompt(u: dict, name: str) -> str:

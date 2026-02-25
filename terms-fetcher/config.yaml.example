@@ -1,0 +1,10 @@
+paratranz:
+  base_url: "https://paratranz.cn/api"
+  project_id: 3489
+  api_key: "your-paratranz-api-key"
+
+# 输出 JSON 文件路径，应与 proxy-server 的 glossary 目录共享
+output_path: "/app/glossary/starsector-terms.json"
+
+# 拉取间隔（秒），默认 10 分钟
+interval_seconds: 600

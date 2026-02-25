@@ -7,7 +7,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from config import AppConfig, TenantConfig, UpstreamConfig
-from glossary import Glossary, GlossaryTerm
+from glossary import Glossary, GlossaryLoader, GlossaryTerm
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -46,6 +46,23 @@ def make_glossary(*pairs: tuple[str, str, str]) -> Glossary:
         GlossaryTerm(english=e, chinese=c, notes=n)
         for e, c, n in pairs
     ])
+
+
+class _TestGlossaryLoader:
+    """In-memory GlossaryLoader-compatible wrapper for tests."""
+    def __init__(self, glossary: Glossary):
+        self._g = glossary
+
+    def find_matches(self, text: str) -> list[GlossaryTerm]:
+        return self._g.find_matches(text)
+
+    def build_system_message(self, matches: list[GlossaryTerm]) -> str:
+        return self._g.build_system_message(matches)
+
+
+def make_glossary_loader(*pairs: tuple[str, str, str]) -> _TestGlossaryLoader:
+    """Return a GlossaryLoader-compatible object backed by in-memory terms."""
+    return _TestGlossaryLoader(make_glossary(*pairs))
 
 
 MOCK_RESPONSE_DATA = {

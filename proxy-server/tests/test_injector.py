@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 from injector import inject
-from tests.conftest import make_glossary, make_tenant, make_upstream
+from tests.conftest import make_glossary, make_glossary_loader, make_tenant, make_upstream
 
 
 @pytest.fixture
@@ -132,7 +132,7 @@ def test_max_chars_counts_all_roles(up):
 # ── glossary injection ────────────────────────────────────────────────────────
 
 def test_glossary_injected_after_system_prompt(up):
-    g = make_glossary(("flux", "幅能", ""))
+    g = make_glossary_loader(("flux", "幅能", ""))
     t = make_tenant(up, glossary=g)
     b = body(messages=[{"role": "user", "content": "Check the flux level."}])
     result = inject(b, t)
@@ -142,7 +142,7 @@ def test_glossary_injected_after_system_prompt(up):
 
 
 def test_glossary_not_injected_when_no_match(up):
-    g = make_glossary(("flux", "幅能", ""))
+    g = make_glossary_loader(("flux", "幅能", ""))
     t = make_tenant(up, glossary=g)
     b = body(messages=[{"role": "user", "content": "Tell me about ships."}])
     result = inject(b, t)
