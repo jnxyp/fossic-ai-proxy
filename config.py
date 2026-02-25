@@ -28,6 +28,7 @@ class UserConfig:
     allowed_models: list[str]
     system_prompt: str
     cors_origins: list[str] = field(default_factory=list)
+    disable_thinking: bool = False
     glossary: Optional[Glossary] = None
     upstream: UpstreamConfig = field(init=False)
 
@@ -88,6 +89,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             upstream_id=upstream_id,
             allowed_models=u.get("allowed_models", []),
             cors_origins=u.get("cors_origins", []),
+            disable_thinking=u.get("disable_thinking", False),
             system_prompt=system_prompt,
             glossary=glossary,
         )

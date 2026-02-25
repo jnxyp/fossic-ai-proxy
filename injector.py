@@ -45,4 +45,7 @@ def inject(body: dict, user: UserConfig) -> dict:
             insert_pos = 1 if user.system_prompt else 0
             messages.insert(insert_pos, {"role": "system", "content": glossary_msg})
 
-    return {**body, "messages": messages}
+    result = {**body, "messages": messages}
+    if user.disable_thinking:
+        result["enable_thinking"] = False
+    return result
