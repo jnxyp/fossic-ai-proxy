@@ -63,7 +63,19 @@ def inject(body: dict, user: UserConfig) -> dict:
             insert_pos = 1 if user.system_prompt else 0
             messages.insert(insert_pos, {"role": "system", "content": glossary_msg})
 
-    result = {**body, "messages": messages}
+    # 移除 Anthropic 格式的 thinking 字段，统一转换为 enable_thinking
+    result = {k: v for k, v in body.items() if k not in ("messages", "thinking")}
+    result["messages"] = messages
+
     if user.disable_thinking is not None:
+        # 配置强制覆盖
         result["enable_thinking"] = not user.disable_thinking
+    else:
+        # 透传客户端设置：解析 thinking: {type: "enabled"/"disabled"}
+        thinking = body.get("thinking")
+        if isinstance(thinking, dict):
+            result["enable_thinking"] = thinking.get("type") == "enabled"
+        elif "enable_thinking" in body:
+            result["enable_thinking"] = body["enable_thinking"]
+
     return result
