@@ -41,6 +41,26 @@ def _parse_sse_content(chunk: bytes) -> str:
     return text
 
 
+def _json_to_sse_stream(json_resp: JSONResponse, agent: AgentConfig) -> StreamingResponse:
+    """Wrap a non-streaming JSON response as an SSE stream, prefixed with the meta chunk."""
+    data = json.loads(json_resp.body)
+    message = data.get("choices", [{}])[0].get("message", {})
+    content = message.get("content", "") or ""
+    chunk = {
+        "id": data.get("id", "chatcmpl-proxy"),
+        "object": "chat.completion.chunk",
+        "model": data.get("model", ""),
+        "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": "stop"}],
+    }
+
+    async def gen():
+        yield _meta_sse_chunk(agent)
+        yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode()
+        yield b"data: [DONE]\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
 async def forward(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -> StreamingResponse | JSONResponse:
     effective = agent or tenant.agent
     upstream = effective.upstream
@@ -51,7 +71,12 @@ async def forward(body: dict, tenant: TenantConfig, agent: AgentConfig | None = 
 
     is_stream = body.get("stream", False)
 
-    if is_stream:
+    if is_stream and effective.force_non_stream:
+        # Agent doesn't support streaming: fetch non-stream, wrap as SSE
+        non_stream_body = {k: v for k, v in body.items() if k != "stream"}
+        json_resp = await _non_stream(upstream.url, headers, non_stream_body)
+        return _json_to_sse_stream(json_resp, effective)
+    elif is_stream:
         return await _stream_response(upstream.url, headers, body, effective)
     else:
         return await _non_stream(upstream.url, headers, body, effective)

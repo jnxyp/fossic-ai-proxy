@@ -32,6 +32,7 @@ class AgentConfig:
     disable_thinking: Optional[bool]
     extra_body: dict
     glossary_mode: Literal["system_message", "translation_options"] = "system_message"
+    force_non_stream: bool = False
     upstream: UpstreamConfig = field(init=False)
 
 
@@ -111,6 +112,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             disable_thinking=a.get("disable_thinking"),
             extra_body=a.get("extra_body") or {},
             glossary_mode=a.get("glossary_mode", "system_message"),
+            force_non_stream=bool(a.get("force_non_stream", False)),
         )
         agent.upstream = upstreams[upstream_id]
         agents[agent_id] = agent
