@@ -6,7 +6,7 @@ import httpx
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from config import UserConfig
+from config import TenantConfig
 
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)
 REJECT_MARKER = "PROXY_REJECT:"
@@ -29,8 +29,8 @@ def _parse_sse_content(chunk: bytes) -> str:
     return text
 
 
-async def forward(body: dict, user: UserConfig) -> StreamingResponse | JSONResponse:
-    upstream = user.upstream
+async def forward(body: dict, tenant: TenantConfig) -> StreamingResponse | JSONResponse:
+    upstream = tenant.upstream
     headers = {
         "Authorization": f"Bearer {upstream.api_key}",
         "Content-Type": "application/json",

@@ -1,12 +1,13 @@
 # fossic-ai-proxy
 
-一个轻量级 LLM API 代理，为每个用户注入指定的系统提示词，兼容 OpenAI `/v1/chat/completions` 接口。
+一个轻量级 LLM API 代理，为每个租户注入指定的系统提示词，兼容 OpenAI `/v1/chat/completions` 接口。
 
 ## 功能
 
-- 按用户 API Key 路由到不同上游 LLM
+- 按租户 API Key 路由到不同上游 LLM
 - 强制注入系统提示词（覆盖客户端传入的 system message）
-- 按用户限制可用模型
+- 每个租户支持多个 API Key
+- 按租户限制可用模型
 - 支持流式（SSE）和非流式响应
 - 系统提示词支持内联配置或外部 `.txt` 文件
 - 动态术语表注入：仅将原文中出现的术语作为单独 system message 发送，节省 token
@@ -37,8 +38,9 @@ upstreams:
       - "gpt-4o"
       - "gpt-4o-mini"
 
-users:
-  - key: "sk-translator-xxx"        # 分发给翻译人员的 Key（自定义）
+tenants:
+  - keys:
+      - "sk-translator-xxx"         # 分发给客户端的 Key（可配置多个）
     name: "translator"
     upstream_id: "openai-main"
     allowed_models:
@@ -63,19 +65,19 @@ docker compose up -d
 
 | 字段 | 说明 |
 |------|------|
-| `id` | 上游唯一标识，供 user 引用 |
+| `id` | 上游唯一标识，供 tenant 引用 |
 | `url` | 完整的上游接口地址 |
 | `api_key` | 上游 API Key |
 | `available_models` | 该上游支持的模型列表 |
 
-### 用户（users）
+### 租户（tenants）
 
 | 字段 | 说明 |
 |------|------|
-| `key` | 分发给客户端的 API Key |
-| `name` | 用户名（仅用于日志标识） |
+| `keys` | 分发给客户端的 API Key 列表（一个或多个） |
+| `name` | 租户名称（仅用于日志标识） |
 | `upstream_id` | 对应上游的 `id` |
-| `allowed_models` | 该用户允许使用的模型，必须是上游 `available_models` 的子集 |
+| `allowed_models` | 该租户允许使用的模型，必须是上游 `available_models` 的子集 |
 | `system_prompt` | 内联系统提示词 |
 | `system_prompt_file` | 从 `prompts/` 目录读取提示词文件（`.txt`），与 `system_prompt` 二选一 |
 | `glossary_file` | 从 `glossary/` 目录读取术语表（`.csv`），可选 |
@@ -85,8 +87,9 @@ docker compose up -d
 将 `.txt` 文件放入 `prompts/` 目录，在配置中引用文件名：
 
 ```yaml
-users:
-  - key: "sk-translator-xxx"
+tenants:
+  - keys:
+      - "sk-translator-xxx"
     name: "translator"
     upstream_id: "openai-main"
     allowed_models:
@@ -103,8 +106,9 @@ users:
 ```
 
 ```yaml
-users:
-  - key: "sk-translator-xxx"
+tenants:
+  - keys:
+      - "sk-translator-xxx"
     name: "translator"
     upstream_id: "openai-main"
     allowed_models:
@@ -123,9 +127,9 @@ docker compose restart
 
 ---
 
-## 多用户 / 多上游示例
+## 多租户 / 多上游示例
 
-以远行星号汉化项目为例，不同译者使用不同上游：
+不同租户使用不同上游，每个租户可配置多个 Key：
 
 ```yaml
 upstreams:
@@ -143,8 +147,10 @@ upstreams:
       - "deepseek-chat"
       - "deepseek-reasoner"
 
-users:
-  - key: "sk-translator-a"
+tenants:
+  - keys:
+      - "sk-translator-a1"
+      - "sk-translator-a2"
     name: "translator-a"
     upstream_id: "openai"
     allowed_models:
@@ -152,7 +158,8 @@ users:
     system_prompt_file: "starsector-zh.txt"
     glossary_file: "starsector-terms.csv"
 
-  - key: "sk-translator-b"
+  - keys:
+      - "sk-translator-b"
     name: "translator-b"
     upstream_id: "deepseek"
     allowed_models:
@@ -166,7 +173,7 @@ users:
 
 ## 客户端接入
 
-将原来指向 OpenAI 的 `base_url` 改为代理地址，`api_key` 换成分配给该用户的 Key，其余代码不变。
+将原来指向 OpenAI 的 `base_url` 改为代理地址，`api_key` 换成分配给该租户的 Key，其余代码不变。
 
 **Python（openai SDK）**
 
@@ -175,7 +182,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://your-server:18080/v1",
-    api_key="sk-translator-a",
+    api_key="sk-translator-a1",
 )
 
 response = client.chat.completions.create(
@@ -190,7 +197,7 @@ print(response.choices[0].message.content)
 
 ```bash
 curl http://your-server:18080/v1/chat/completions \
-  -H "Authorization: Bearer sk-translator-a" \
+  -H "Authorization: Bearer sk-translator-a1" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o-mini",
@@ -206,6 +213,7 @@ curl http://your-server:18080/v1/chat/completions \
 |--------|------|
 | `401` | API Key 无效 |
 | `400` | 未传 `model` 字段，或 model 不在允许列表中 |
+| `403` | Referer 不在允许列表，或请求内容超出服务范围 |
 | 上游状态码 | 上游返回的原始错误，响应体透传 |
 
 ---
