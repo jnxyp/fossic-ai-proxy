@@ -59,6 +59,11 @@ async def chat_completions_preflight(request: Request):
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request, user: UserConfig = Depends(get_user)):
+    if user.allowed_referers:
+        referer = request.headers.get("referer", "")
+        if not any(referer.startswith(r) for r in user.allowed_referers):
+            raise HTTPException(status_code=403, detail="Referer not allowed.")
+
     body = await request.json()
     modified_body = inject(body, user)
     response = await forward(modified_body, user)
