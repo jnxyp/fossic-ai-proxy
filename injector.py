@@ -33,4 +33,16 @@ def inject(body: dict, user: UserConfig) -> dict:
     if user.system_prompt:
         messages = [{"role": "system", "content": user.system_prompt}] + messages
 
+    if user.glossary:
+        user_text = " ".join(
+            m["content"] for m in messages
+            if m.get("role") == "user" and isinstance(m.get("content"), str)
+        )
+        matches = user.glossary.find_matches(user_text)
+        if matches:
+            glossary_msg = user.glossary.build_system_message(matches)
+            # 插入在主 system prompt 之后，对话消息之前
+            insert_pos = 1 if user.system_prompt else 0
+            messages.insert(insert_pos, {"role": "system", "content": glossary_msg})
+
     return {**body, "messages": messages}

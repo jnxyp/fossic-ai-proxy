@@ -3,7 +3,11 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
+
 import yaml
+
+from glossary import Glossary, load_glossary_csv
 
 PROMPTS_DIR = Path("prompts")
 
@@ -23,6 +27,7 @@ class UserConfig:
     upstream_id: str
     allowed_models: list[str]
     system_prompt: str
+    glossary: Optional[Glossary] = None
     upstream: UpstreamConfig = field(init=False)
 
 
@@ -30,6 +35,17 @@ class UserConfig:
 class AppConfig:
     upstreams: dict[str, UpstreamConfig]
     users: dict[str, UserConfig]
+
+
+def _load_glossary(u: dict, name: str) -> Optional[Glossary]:
+    glossary_file = u.get("glossary_file")
+    if not glossary_file:
+        return None
+    try:
+        return load_glossary_csv(glossary_file)
+    except FileNotFoundError:
+        print(f"[config] ERROR: user '{name}' glossary_file '{glossary_file}' not found in glossary/", file=sys.stderr)
+        sys.exit(1)
 
 
 def _load_prompt(u: dict, name: str) -> str:
@@ -64,12 +80,14 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             sys.exit(1)
 
         system_prompt = _load_prompt(u, u.get("name", "?"))
+        glossary = _load_glossary(u, u.get("name", "?"))
         user = UserConfig(
             key=u["key"],
             name=u["name"],
             upstream_id=upstream_id,
             allowed_models=u.get("allowed_models", []),
             system_prompt=system_prompt,
+            glossary=glossary,
         )
         user.upstream = upstreams[upstream_id]
 

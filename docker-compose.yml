@@ -6,4 +6,5 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./prompts:/app/prompts:ro
+      - ./glossary:/app/glossary:ro
     restart: unless-stopped
