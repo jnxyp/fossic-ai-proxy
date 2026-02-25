@@ -81,11 +81,12 @@ async def _stream_response(url: str, headers: dict, body: dict) -> StreamingResp
         await client.aclose()
         raise HTTPException(status_code=resp.status_code, detail=error_body.decode())
 
-    # Buffer until we accumulate enough content to detect the rejection marker
+    # Reuse the same iterator across buffering and streaming phases
+    raw_iter = resp.aiter_raw()
     buffered_chunks: list[bytes] = []
     content_so_far = ""
 
-    async for chunk in resp.aiter_raw():
+    async for chunk in raw_iter:
         if not chunk:
             continue
         buffered_chunks.append(chunk)
@@ -95,8 +96,7 @@ async def _stream_response(url: str, headers: dict, body: dict) -> StreamingResp
 
     # Check for rejection
     if content_so_far.startswith(REJECT_MARKER):
-        # Drain remaining stream to get the full reason JSON
-        async for chunk in resp.aiter_raw():
+        async for chunk in raw_iter:
             if chunk:
                 content_so_far += _parse_sse_content(chunk)
         await resp.aclose()
@@ -109,12 +109,12 @@ async def _stream_response(url: str, headers: dict, body: dict) -> StreamingResp
             reason = "请求被拒绝"
         raise HTTPException(status_code=403, detail=reason)
 
-    # Not a rejection — stream the buffer and the rest of the response
+    # Not a rejection — yield buffered chunks then continue from the same iterator
     async def gen():
         try:
             for chunk in buffered_chunks:
                 yield chunk
-            async for chunk in resp.aiter_raw():
+            async for chunk in raw_iter:
                 if chunk:
                     yield chunk
         finally:
