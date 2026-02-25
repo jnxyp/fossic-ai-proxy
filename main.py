@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -10,6 +12,13 @@ from config import AppConfig, UserConfig, load_config
 from injector import inject
 from proxy import forward
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger("fossic-ai-proxy")
+
 app_config: AppConfig | None = None
 bearer = HTTPBearer()
 
@@ -18,7 +27,7 @@ bearer = HTTPBearer()
 async def lifespan(app: FastAPI):
     global app_config
     app_config = load_config("config.yaml")
-    print(f"[startup] loaded {len(app_config.users)} user(s), {len(app_config.upstreams)} upstream(s)")
+    log.info(f"loaded {len(app_config.users)} user(s), {len(app_config.upstreams)} upstream(s)")
     yield
 
 
@@ -45,7 +54,6 @@ def _cors_headers(origin: str, user: UserConfig) -> dict:
 @app.options("/v1/chat/completions")
 async def chat_completions_preflight(request: Request):
     origin = request.headers.get("origin", "")
-    # 预检请求无法鉴权，匹配任意用户的 cors_origins
     allowed = any(origin in user.cors_origins for user in app_config.users.values())
     if allowed:
         return Response(status_code=204, headers={
@@ -62,11 +70,29 @@ async def chat_completions(request: Request, user: UserConfig = Depends(get_user
     if user.allowed_referers:
         referer = request.headers.get("referer", "")
         if not any(referer.startswith(r) for r in user.allowed_referers):
+            log.warning(f"[{user.name}] blocked: referer='{referer}'")
             raise HTTPException(status_code=403, detail="Referer not allowed.")
 
     body = await request.json()
-    modified_body = inject(body, user)
+
+    try:
+        modified_body = inject(body, user)
+    except HTTPException as e:
+        log.warning(f"[{user.name}] rejected: {e.detail}")
+        raise
+
+    model = modified_body.get("model", "?")
+    user_msgs = [m for m in body.get("messages", []) if m.get("role") == "user"]
+    total_chars = sum(len(m.get("content", "")) for m in body.get("messages", []) if isinstance(m.get("content"), str))
+    stream = modified_body.get("stream", False)
+
+    log.info(f"[{user.name}] -> {user.upstream_id}/{model} | msgs={len(user_msgs)} chars={total_chars} stream={stream}")
+
+    t0 = time.monotonic()
     response = await forward(modified_body, user)
+    elapsed = time.monotonic() - t0
+
+    log.info(f"[{user.name}] <- {user.upstream_id}/{model} | {elapsed:.2f}s")
 
     origin = request.headers.get("origin", "")
     for k, v in _cors_headers(origin, user).items():
