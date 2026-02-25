@@ -256,6 +256,67 @@ def test_no_keys_exits(tmp_path):
         config_module.load_config(path)
 
 
+def test_upgrade_agent_loaded(tmp_path):
+    path = write_config(tmp_path, """
+        upstreams:
+          - id: up1
+            url: http://test
+            api_key: key
+            available_models: [model-a, model-b]
+        agents:
+          - id: agent1
+            upstream_id: up1
+            model: model-a
+            system_prompt: "hello"
+          - id: agent2
+            upstream_id: up1
+            model: model-b
+            system_prompt: "hello"
+        tenants:
+          - keys: [sk-abc]
+            name: tenant1
+            agent_id: agent1
+            upgrade_agent_id: agent2
+            upgrade_window: 30
+    """)
+    cfg = config_module.load_config(path)
+    t = cfg.tenants["sk-abc"]
+    assert t.upgrade_agent_id == "agent2"
+    assert t.upgrade_window == 30
+    assert t.upgrade_agent is not None
+    assert t.upgrade_agent.id == "agent2"
+
+
+def test_upgrade_agent_defaults_to_none(tmp_path):
+    cfg = config_module.load_config(minimal_config(tmp_path))
+    t = cfg.tenants["sk-abc"]
+    assert t.upgrade_agent_id is None
+    assert t.upgrade_agent is None
+    assert t.upgrade_window == 15
+
+
+def test_unknown_upgrade_agent_id_exits(tmp_path):
+    path = write_config(tmp_path, """
+        upstreams:
+          - id: up1
+            url: http://test
+            api_key: key
+            available_models: [model-a]
+        agents:
+          - id: agent1
+            upstream_id: up1
+            model: model-a
+            system_prompt: "hello"
+        tenants:
+          - keys: [sk-abc]
+            name: tenant1
+            agent_id: agent1
+            upgrade_agent_id: nonexistent
+    """)
+    with pytest.raises(SystemExit):
+        config_module.load_config(path)
+
+
 def test_missing_prompt_file_exits(tmp_path):
     path = write_config(tmp_path, """
         upstreams:

@@ -43,7 +43,10 @@ class TenantConfig:
     allowed_referers: list[str] = field(default_factory=list)
     max_user_messages: Optional[int] = None
     max_chars: Optional[int] = None
+    upgrade_agent_id: Optional[str] = None
+    upgrade_window: int = 15
     agent: AgentConfig = field(init=False)
+    upgrade_agent: Optional[AgentConfig] = field(init=False, default=None)
 
 
 @dataclass
@@ -126,6 +129,11 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             log.error(f"tenant '{name}' has no keys defined")
             sys.exit(1)
 
+        upgrade_agent_id = t.get("upgrade_agent_id")
+        if upgrade_agent_id and upgrade_agent_id not in agents:
+            log.error(f"tenant '{name}' references unknown upgrade_agent_id '{upgrade_agent_id}'")
+            sys.exit(1)
+
         tenant = TenantConfig(
             name=name,
             agent_id=agent_id,
@@ -133,8 +141,12 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             allowed_referers=t.get("allowed_referers", []),
             max_user_messages=t.get("max_user_messages"),
             max_chars=t.get("max_chars"),
+            upgrade_agent_id=upgrade_agent_id,
+            upgrade_window=t.get("upgrade_window", 15),
         )
         tenant.agent = agents[agent_id]
+        if upgrade_agent_id:
+            tenant.upgrade_agent = agents[upgrade_agent_id]
 
         for key in keys:
             tenants[key] = tenant

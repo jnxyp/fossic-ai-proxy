@@ -10,6 +10,7 @@ from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 import db
+import upgrade
 from config import AppConfig, TenantConfig, load_config
 from injector import inject
 from logger import get_logger, set_level
@@ -79,8 +80,13 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
 
     body = await request.json()
 
+    effective_agent = tenant.agent
+    if tenant.upgrade_agent and upgrade.check_and_record(used_key, body.get("messages", []), tenant.upgrade_window):
+        effective_agent = tenant.upgrade_agent
+        log.info(f"[{tenant.name}] repeat request within {tenant.upgrade_window}s -> upgrade to {tenant.upgrade_agent_id}")
+
     try:
-        modified_body = inject(body, tenant)
+        modified_body = inject(body, tenant, effective_agent)
     except HTTPException as e:
         log.warning(f"[{tenant.name}] rejected: {e.detail}")
         raise

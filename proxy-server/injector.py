@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-from config import TenantConfig
+from config import AgentConfig, TenantConfig
 
 
-def inject(body: dict, tenant: TenantConfig) -> dict:
+def inject(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -> dict:
     """
     1. 校验请求限制（消息数、字符数）
     2. 移除所有 role=system 的 message
@@ -15,7 +15,7 @@ def inject(body: dict, tenant: TenantConfig) -> dict:
     4. 强制使用 agent.model，合并 agent.extra_body（agent 优先）
     返回修改后的 body（浅拷贝，messages 列表为新对象）
     """
-    agent = tenant.agent
+    agent = agent or tenant.agent
     raw_messages = body.get("messages", [])
 
     if tenant.max_user_messages is not None:
