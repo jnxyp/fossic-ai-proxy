@@ -9,6 +9,7 @@
 - 按用户限制可用模型
 - 支持流式（SSE）和非流式响应
 - 系统提示词支持内联配置或外部 `.txt` 文件
+- 动态术语表注入：仅将原文中出现的术语作为单独 system message 发送，节省 token
 
 ## 快速开始
 
@@ -37,12 +38,13 @@ upstreams:
       - "gpt-4o-mini"
 
 users:
-  - key: "sk-your-client-key"       # 分发给客户端的 Key（自定义）
-    name: "alice"
+  - key: "sk-translator-xxx"        # 分发给翻译人员的 Key（自定义）
+    name: "translator"
     upstream_id: "openai-main"
     allowed_models:
       - "gpt-4o-mini"
-    system_prompt: "你是 Alice 的专属助手，请用正式语气回答。"
+    system_prompt_file: "starsector-zh.txt"   # prompts/ 目录下的提示词文件
+    glossary_file: "starsector-terms.csv"     # glossary/ 目录下的术语表
 ```
 
 ### 3. 启动
@@ -76,6 +78,7 @@ docker compose up -d
 | `allowed_models` | 该用户允许使用的模型，必须是上游 `available_models` 的子集 |
 | `system_prompt` | 内联系统提示词 |
 | `system_prompt_file` | 从 `prompts/` 目录读取提示词文件（`.txt`），与 `system_prompt` 二选一 |
+| `glossary_file` | 从 `glossary/` 目录读取术语表（`.csv`），可选 |
 
 ### 使用提示词文件
 
@@ -83,15 +86,36 @@ docker compose up -d
 
 ```yaml
 users:
-  - key: "sk-user-bob"
-    name: "bob"
+  - key: "sk-translator-xxx"
+    name: "translator"
     upstream_id: "openai-main"
     allowed_models:
-      - "gpt-4o"
-    system_prompt_file: "bob.txt"   # 对应 prompts/bob.txt
+      - "gpt-4o-mini"
+    system_prompt_file: "starsector-zh.txt"   # 对应 prompts/starsector-zh.txt
 ```
 
-`prompts/` 目录通过 volume 挂载到容器，修改文件后重启容器生效：
+### 使用术语表
+
+将 `.csv` 文件放入 `glossary/` 目录，在配置中引用文件名。CSV 格式为：
+
+```
+英文原文,中文译文,类型,同义/别名（换行分隔）,备注说明
+```
+
+```yaml
+users:
+  - key: "sk-translator-xxx"
+    name: "translator"
+    upstream_id: "openai-main"
+    allowed_models:
+      - "gpt-4o-mini"
+    system_prompt_file: "starsector-zh.txt"
+    glossary_file: "starsector-terms.csv"     # 对应 glossary/starsector-terms.csv
+```
+
+每次请求时，代理会扫描用户输入，仅将命中的术语作为单独的 system message 发送，未命中的术语不占用 token。
+
+`prompts/` 和 `glossary/` 目录通过 volume 挂载到容器，修改文件后重启容器生效：
 
 ```bash
 docker compose restart
@@ -100,6 +124,8 @@ docker compose restart
 ---
 
 ## 多用户 / 多上游示例
+
+以远行星号汉化项目为例，不同译者使用不同上游：
 
 ```yaml
 upstreams:
@@ -118,20 +144,22 @@ upstreams:
       - "deepseek-reasoner"
 
 users:
-  - key: "sk-client-alice"
-    name: "alice"
+  - key: "sk-translator-a"
+    name: "translator-a"
     upstream_id: "openai"
     allowed_models:
       - "gpt-4o-mini"
-    system_prompt_file: "alice.txt"
+    system_prompt_file: "starsector-zh.txt"
+    glossary_file: "starsector-terms.csv"
 
-  - key: "sk-client-bob"
-    name: "bob"
+  - key: "sk-translator-b"
+    name: "translator-b"
     upstream_id: "deepseek"
     allowed_models:
       - "deepseek-chat"
       - "deepseek-reasoner"
-    system_prompt: "You are Bob's assistant."
+    system_prompt_file: "starsector-zh.txt"
+    glossary_file: "starsector-terms.csv"
 ```
 
 ---
@@ -147,25 +175,26 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://your-server:18080/v1",
-    api_key="sk-client-alice",
+    api_key="sk-translator-a",
 )
 
 response = client.chat.completions.create(
     model="gpt-4o-mini",
-    messages=[{"role": "user", "content": "你好"}],
+    messages=[{"role": "user", "content": "The flux level is critical, vent now."}],
 )
 print(response.choices[0].message.content)
+# 幅能水平危急，立即主动排幅。
 ```
 
 **curl**
 
 ```bash
 curl http://your-server:18080/v1/chat/completions \
-  -H "Authorization: Bearer sk-client-alice" \
+  -H "Authorization: Bearer sk-translator-a" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4o-mini",
-    "messages": [{"role": "user", "content": "你好"}]
+    "messages": [{"role": "user", "content": "The flux level is critical, vent now."}]
   }'
 ```
 
@@ -187,11 +216,15 @@ curl http://your-server:18080/v1/chat/completions \
 fossic-ai-proxy/
 ├── main.py              # FastAPI 入口
 ├── proxy.py             # 请求转发（流式 / 非流式）
-├── injector.py          # 系统提示词注入与模型校验
+├── injector.py          # 系统提示词与术语表注入
+├── glossary.py          # 术语表加载与匹配
 ├── config.py            # 配置加载
 ├── config.yaml          # 运行配置（不入库）
 ├── config.yaml.example  # 配置示例
 ├── prompts/             # 提示词文件目录
+│   └── starsector-zh.txt
+├── glossary/            # 术语表目录
+│   └── starsector-terms.csv
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
