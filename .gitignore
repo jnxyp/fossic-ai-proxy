@@ -1,0 +1,12 @@
+# 敏感配置（含 API Key）
+config.yaml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 环境变量
+.env

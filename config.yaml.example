@@ -1,0 +1,30 @@
+upstreams:
+  - id: "openai-main"
+    url: "https://api.openai.com/v1/chat/completions"
+    api_key: "sk-openai-xxx"
+    available_models:
+      - "gpt-4o"
+      - "gpt-4o-mini"
+
+  - id: "deepseek"
+    url: "https://api.deepseek.com/v1/chat/completions"
+    api_key: "sk-deepseek-xxx"
+    available_models:
+      - "deepseek-chat"
+      - "deepseek-reasoner"
+
+users:
+  - key: "sk-user-alice-xxxx"
+    name: "alice"
+    upstream_id: "openai-main"
+    allowed_models:
+      - "gpt-4o-mini"
+    system_prompt_file: "alice.txt"   # 从 prompts/alice.txt 读取
+
+  - key: "sk-user-bob-xxxx"
+    name: "bob"
+    upstream_id: "deepseek"
+    allowed_models:
+      - "deepseek-chat"
+      - "deepseek-reasoner"
+    system_prompt: "You are Bob's coding assistant. Always respond in English."  # 也可直接内联
