@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+import db
 from config import AppConfig, TenantConfig, load_config
 from injector import inject
-from proxy import forward
+from proxy import forward, _parse_sse_content
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,9 +29,11 @@ bearer = HTTPBearer()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global app_config
+    db.init_db()
     app_config = load_config("config.yaml")
+    logging.getLogger().setLevel(app_config.log_level.upper())
     tenant_count = len({t.name for t in app_config.tenants.values()})
-    log.info(f"loaded {tenant_count} tenant(s), {len(app_config.upstreams)} upstream(s)")
+    log.info(f"loaded {tenant_count} tenant(s), {len(app_config.upstreams)} upstream(s), log_level={app_config.log_level.upper()}")
     yield
 
 
@@ -68,6 +73,8 @@ async def chat_completions_preflight(request: Request):
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_tenant)):
+    used_key = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+
     if tenant.allowed_referers:
         referer = request.headers.get("referer", "")
         if not any(referer.startswith(r) for r in tenant.allowed_referers):
@@ -84,10 +91,12 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
 
     model = modified_body.get("model", "?")
     user_msgs = [m for m in body.get("messages", []) if m.get("role") == "user"]
-    total_chars = sum(len(m.get("content", "")) for m in body.get("messages", []) if isinstance(m.get("content"), str))
-    stream = modified_body.get("stream", False)
+    input_chars = sum(len(m.get("content", "")) for m in body.get("messages", []) if isinstance(m.get("content"), str))
+    is_stream = modified_body.get("stream", False)
 
-    log.info(f"[{tenant.name}] -> {tenant.upstream_id}/{model} | msgs={len(user_msgs)} chars={total_chars} stream={stream}")
+    log.info(f"[{tenant.name}] -> {tenant.upstream_id}/{model} | msgs={len(user_msgs)} chars={input_chars} stream={is_stream}")
+    log.debug(f"[{tenant.name}] received body:\n{json.dumps(body, ensure_ascii=False, indent=2)}")
+    log.debug(f"[{tenant.name}] injected body:\n{json.dumps(modified_body, ensure_ascii=False, indent=2)}")
 
     t0 = time.monotonic()
     response = await forward(modified_body, tenant)
@@ -96,7 +105,42 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
     log.info(f"[{tenant.name}] <- {tenant.upstream_id}/{model} | {elapsed:.2f}s")
 
     origin = request.headers.get("origin", "")
-    for k, v in _cors_headers(origin, tenant).items():
+    cors = _cors_headers(origin, tenant)
+
+    if isinstance(response, StreamingResponse):
+        original_iter = response.body_iterator
+
+        async def counting_stream():
+            output_chars = 0
+            stream_start = time.monotonic()
+            try:
+                async for chunk in original_iter:
+                    if isinstance(chunk, bytes):
+                        output_chars += len(_parse_sse_content(chunk))
+                    yield chunk
+            finally:
+                elapsed_ms = int((time.monotonic() - stream_start) * 1000)
+                asyncio.create_task(asyncio.to_thread(
+                    db.log_request, tenant.name, used_key, model,
+                    True, input_chars, output_chars, elapsed_ms, 200,
+                ))
+
+        response = StreamingResponse(counting_stream(), media_type="text/event-stream")
+    else:
+        # Non-streaming: parse output chars from response body
+        try:
+            data = json.loads(response.body)
+            content = (data.get("choices", [{}])[0].get("message", {}).get("content") or "")
+            output_chars = len(content) if isinstance(content, str) else 0
+        except Exception:
+            output_chars = None
+        elapsed_ms = int(elapsed * 1000)
+        asyncio.create_task(asyncio.to_thread(
+            db.log_request, tenant.name, used_key, model,
+            False, input_chars, output_chars, elapsed_ms, 200,
+        ))
+
+    for k, v in cors.items():
         response.headers[k] = v
 
     return response

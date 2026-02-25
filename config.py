@@ -39,6 +39,7 @@ class TenantConfig:
 class AppConfig:
     upstreams: dict[str, UpstreamConfig]
     tenants: dict[str, TenantConfig]  # key -> TenantConfig
+    log_level: str = "info"
 
 
 def _load_glossary(u: dict, name: str) -> Optional[Glossary]:
@@ -119,4 +120,4 @@ def load_config(path: str = "config.yaml") -> AppConfig:
         for key in keys:
             tenants[key] = tenant
 
-    return AppConfig(upstreams=upstreams, tenants=tenants)
+    return AppConfig(upstreams=upstreams, tenants=tenants, log_level=raw.get("log_level", "info"))
