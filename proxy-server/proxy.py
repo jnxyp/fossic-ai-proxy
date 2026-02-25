@@ -13,7 +13,7 @@ REJECT_MARKER = "PROXY_REJECT:"
 
 
 def _meta_text(agent: AgentConfig) -> str:
-    return f"[proxy: agent={agent.id} model={agent.model} upstream={agent.upstream.id}]\n\n"
+    return f"本次请求由代理「{agent.id}」处理，使用模型 {agent.model}，上游服务 {agent.upstream.id}。\n\n"
 
 
 def _meta_sse_chunk(agent: AgentConfig) -> bytes:

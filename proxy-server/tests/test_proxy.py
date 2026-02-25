@@ -14,9 +14,9 @@ def test_meta_text_contains_agent_model_upstream():
     up = make_upstream(id="qwen")
     ag = make_agent(up, id="starsector-qwen-mt-plus", model="qwen-mt-plus")
     meta = _meta_text(ag)
-    assert "agent=starsector-qwen-mt-plus" in meta
-    assert "model=qwen-mt-plus" in meta
-    assert "upstream=qwen" in meta
+    assert "starsector-qwen-mt-plus" in meta
+    assert "qwen-mt-plus" in meta
+    assert "qwen" in meta
 
 
 def test_meta_text_ends_with_double_newline():
@@ -43,9 +43,9 @@ def test_meta_sse_chunk_contains_reasoning_content():
     line = next(l for l in text.split("\n") if l.startswith("data: "))
     data = json.loads(line[6:])
     rc = data["choices"][0]["delta"]["reasoning_content"]
-    assert "agent=agent-x" in rc
-    assert "model=model-x" in rc
-    assert "upstream=qwen" in rc
+    assert "agent-x" in rc
+    assert "model-x" in rc
+    assert "qwen" in rc
 
 
 # ── force_non_stream SSE wrapping ─────────────────────────────────────────────
@@ -79,7 +79,7 @@ def test_json_to_sse_stream_emits_meta_first():
     resp = _json_to_sse_stream(_make_json_resp("翻译结果"), ag)
     chunks = _collect_stream(resp)
     assert "reasoning_content" in chunks[0]["choices"][0]["delta"]
-    assert "agent=plus-agent" in chunks[0]["choices"][0]["delta"]["reasoning_content"]
+    assert "plus-agent" in chunks[0]["choices"][0]["delta"]["reasoning_content"]
 
 
 def test_json_to_sse_stream_emits_content():
