@@ -27,6 +27,7 @@ class UserConfig:
     upstream_id: str
     allowed_models: list[str]
     system_prompt: str
+    cors_origins: list[str] = field(default_factory=list)
     glossary: Optional[Glossary] = None
     upstream: UpstreamConfig = field(init=False)
 
@@ -86,6 +87,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             name=u["name"],
             upstream_id=upstream_id,
             allowed_models=u.get("allowed_models", []),
+            cors_origins=u.get("cors_origins", []),
             system_prompt=system_prompt,
             glossary=glossary,
         )
