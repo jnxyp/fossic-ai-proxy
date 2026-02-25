@@ -31,7 +31,7 @@ class UserConfig:
     allowed_referers: list[str] = field(default_factory=list)
     max_user_messages: Optional[int] = None
     max_chars: Optional[int] = None
-    disable_thinking: bool = False
+    disable_thinking: Optional[bool] = None
     glossary: Optional[Glossary] = None
     upstream: UpstreamConfig = field(init=False)
 
@@ -95,7 +95,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             allowed_referers=u.get("allowed_referers", []),
             max_user_messages=u.get("max_user_messages"),
             max_chars=u.get("max_chars"),
-            disable_thinking=u.get("disable_thinking", False),
+            disable_thinking=u.get("disable_thinking"),
             system_prompt=system_prompt,
             glossary=glossary,
         )

@@ -64,6 +64,6 @@ def inject(body: dict, user: UserConfig) -> dict:
             messages.insert(insert_pos, {"role": "system", "content": glossary_msg})
 
     result = {**body, "messages": messages}
-    if user.disable_thinking:
-        result["enable_thinking"] = False
+    if user.disable_thinking is not None:
+        result["enable_thinking"] = not user.disable_thinking
     return result
