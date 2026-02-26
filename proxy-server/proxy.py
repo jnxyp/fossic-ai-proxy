@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from config import AgentConfig, TenantConfig
 
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=5.0)
-REJECT_MARKER = "PROXY_REJECT:"
 
 
 def _meta_text(agent: AgentConfig) -> str:
@@ -90,15 +89,6 @@ async def _non_stream(url: str, headers: dict, body: dict, agent: AgentConfig | 
 
     data = resp.json()
     message = data.get("choices", [{}])[0].get("message", {})
-    content = message.get("content", "") or ""
-
-    if isinstance(content, str) and content.startswith(REJECT_MARKER):
-        reason_str = content[len(REJECT_MARKER):]
-        try:
-            reason = json.loads(reason_str).get("reason", "请求被拒绝")
-        except Exception:
-            reason = "请求被拒绝"
-        raise HTTPException(status_code=403, detail=reason)
 
     if agent is not None:
         meta = _meta_text(agent)
@@ -109,11 +99,8 @@ async def _non_stream(url: str, headers: dict, body: dict, agent: AgentConfig | 
     return JSONResponse(content=data, status_code=200)
 
 
-async def _stream_response(url: str, headers: dict, body: dict, agent: AgentConfig) -> StreamingResponse | JSONResponse:
-    """
-    Start the streaming request, buffer the beginning to detect PROXY_REJECT,
-    then either raise HTTPException or return a StreamingResponse.
-    """
+async def _stream_response(url: str, headers: dict, body: dict, agent: AgentConfig) -> StreamingResponse:
+    """Stream response from upstream, prefixed with meta chunk."""
     client = httpx.AsyncClient(timeout=TIMEOUT)
     req = client.build_request("POST", url, headers=headers, json=body)
     resp = await client.send(req, stream=True)
@@ -124,40 +111,11 @@ async def _stream_response(url: str, headers: dict, body: dict, agent: AgentConf
         await client.aclose()
         raise HTTPException(status_code=resp.status_code, detail=error_body.decode())
 
-    # Reuse the same iterator across buffering and streaming phases
     raw_iter = resp.aiter_raw()
-    buffered_chunks: list[bytes] = []
-    content_so_far = ""
 
-    async for chunk in raw_iter:
-        if not chunk:
-            continue
-        buffered_chunks.append(chunk)
-        content_so_far += _parse_sse_content(chunk)
-        if len(content_so_far) >= len(REJECT_MARKER):
-            break
-
-    # Check for rejection
-    if content_so_far.startswith(REJECT_MARKER):
-        async for chunk in raw_iter:
-            if chunk:
-                content_so_far += _parse_sse_content(chunk)
-        await resp.aclose()
-        await client.aclose()
-
-        reason_str = content_so_far[len(REJECT_MARKER):]
-        try:
-            reason = json.loads(reason_str).get("reason", "请求被拒绝")
-        except Exception:
-            reason = "请求被拒绝"
-        raise HTTPException(status_code=403, detail=reason)
-
-    # Not a rejection — yield meta chunk first, then buffered chunks, then the rest
     async def gen():
         try:
             yield _meta_sse_chunk(agent)
-            for chunk in buffered_chunks:
-                yield chunk
             async for chunk in raw_iter:
                 if chunk:
                     yield chunk

@@ -189,19 +189,3 @@ def test_no_cors_headers_for_disallowed_origin(api_client, mock_forward):
     assert "access-control-allow-origin" not in resp.headers
 
 
-# ── proxy rejection passthrough ───────────────────────────────────────────────
-
-def test_proxy_reject_returns_403(api_client):
-    reject_body = {
-        "choices": [{
-            "message": {"content": 'PROXY_REJECT:{"reason":"不支持该类型请求"}'},
-        }]
-    }
-    with patch("main.forward", new_callable=AsyncMock,
-               return_value=JSONResponse(content=reject_body)):
-        resp = api_client.post(
-            "/v1/chat/completions",
-            headers={"Authorization": "Bearer sk-valid-key"},
-            json=VALID_BODY,
-        )
-    assert resp.status_code in (200, 403)
