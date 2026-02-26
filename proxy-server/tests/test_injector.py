@@ -256,6 +256,34 @@ def test_user_prefix_fallback_when_no_user_message(up):
     assert system_msgs[0]["content"] == "[SYS]"
 
 
+def test_user_prefix_e2e_with_glossary(up):
+    """End-to-end test: system_prompt_position=user_prefix with glossary."""
+    g = make_glossary_loader(("flux", "幅能", ""))
+    ag = make_agent(
+        up,
+        system_prompt="[PROMPT]",
+        system_prompt_position="user_prefix",
+        glossary=g
+    )
+    t = make_tenant(ag)
+    b = body(messages=[{"role": "user", "content": "Check the flux level"}])
+    result = inject(b, t)
+
+    # No system messages should exist
+    system_msgs = [m for m in result["messages"] if m["role"] == "system"]
+    assert len(system_msgs) == 0, f"Expected no system messages, got: {system_msgs}"
+
+    # Single user message with prepended prompt
+    user_msgs = [m for m in result["messages"] if m["role"] == "user"]
+    assert len(user_msgs) == 1
+    content = user_msgs[0]["content"]
+
+    # Content should start with prompt, contain glossary, then user input
+    assert content.startswith("[PROMPT]"), f"Content should start with prompt: {content[:50]}"
+    assert "幅能" in content, f"Content should contain glossary translation: {content}"
+    assert "Check the flux level" in content, f"Content should contain user input: {content}"
+
+
 # ── extra_body ────────────────────────────────────────────────────────────────
 
 def test_extra_body_merged_into_result(up):
