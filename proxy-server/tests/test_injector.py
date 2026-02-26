@@ -189,6 +189,73 @@ def test_glossary_mode_translation_options_includes_alternatives(up):
     assert "flux level" in sources
 
 
+# ── system_prompt_position: user_prefix ──────────────────────────────────────
+
+def test_user_prefix_prepends_system_prompt_to_user_message(up):
+    t = make_tenant(make_agent(up, system_prompt="[SYS] Be helpful.",
+                               system_prompt_position="user_prefix"))
+    b = body(messages=[{"role": "user", "content": "translate this"}])
+    result = inject(b, t)
+    user_msgs = [m for m in result["messages"] if m["role"] == "user"]
+    assert len(user_msgs) == 1
+    assert user_msgs[0]["content"].startswith("[SYS] Be helpful.")
+    assert "translate this" in user_msgs[0]["content"]
+
+
+def test_user_prefix_no_system_messages(up):
+    t = make_tenant(make_agent(up, system_prompt="[PROMPT]",
+                               system_prompt_position="user_prefix"))
+    b = body(messages=[{"role": "user", "content": "hello"}])
+    result = inject(b, t)
+    system_msgs = [m for m in result["messages"] if m["role"] == "system"]
+    assert len(system_msgs) == 0
+
+
+def test_user_prefix_glossary_appended_to_prefix(up):
+    g = make_glossary_loader(("flux", "幅能", ""))
+    t = make_tenant(make_agent(up, system_prompt="[SYS]", glossary=g,
+                               system_prompt_position="user_prefix"))
+    b = body(messages=[{"role": "user", "content": "Check the flux level."}])
+    result = inject(b, t)
+    user_msgs = [m for m in result["messages"] if m["role"] == "user"]
+    assert len(user_msgs) == 1
+    content = user_msgs[0]["content"]
+    assert content.startswith("[SYS]")
+    assert "flux" in content
+    assert "幅能" in content
+
+
+def test_user_prefix_no_glossary_no_extra_content(up):
+    g = make_glossary_loader(("flux", "幅能", ""))
+    t = make_tenant(make_agent(up, system_prompt="[SYS]", glossary=g,
+                               system_prompt_position="user_prefix"))
+    b = body(messages=[{"role": "user", "content": "Tell me about ships."}])
+    result = inject(b, t)
+    user_msgs = [m for m in result["messages"] if m["role"] == "user"]
+    assert user_msgs[0]["content"].startswith("[SYS]\n\n")  # only prefix, no glossary
+    assert "Tell me about ships." in user_msgs[0]["content"]
+
+
+def test_user_prefix_no_translation_options_injected(up):
+    t = make_tenant(make_agent(up, system_prompt="[SYS]",
+                               system_prompt_position="user_prefix",
+                               extra_body={}))
+    b = body(messages=[{"role": "user", "content": "hello"}])
+    result = inject(b, t)
+    assert "translation_options" not in result
+
+
+def test_user_prefix_fallback_when_no_user_message(up):
+    t = make_tenant(make_agent(up, system_prompt="[SYS]",
+                               system_prompt_position="user_prefix"))
+    b = body(messages=[{"role": "assistant", "content": "previous response"}])
+    result = inject(b, t)
+    # Fallback: insert as system message when no user message found
+    system_msgs = [m for m in result["messages"] if m["role"] == "system"]
+    assert len(system_msgs) == 1
+    assert system_msgs[0]["content"] == "[SYS]"
+
+
 # ── extra_body ────────────────────────────────────────────────────────────────
 
 def test_extra_body_merged_into_result(up):

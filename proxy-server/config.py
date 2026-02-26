@@ -33,6 +33,7 @@ class AgentConfig:
     extra_body: dict
     glossary_mode: Literal["system_message", "translation_options"] = "system_message"
     force_non_stream: bool = False
+    system_prompt_position: Literal["system", "user_prefix"] = "system"
     upstream: UpstreamConfig = field(init=False)
 
 
@@ -113,6 +114,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             extra_body=a.get("extra_body") or {},
             glossary_mode=a.get("glossary_mode", "system_message"),
             force_non_stream=bool(a.get("force_non_stream", False)),
+            system_prompt_position=a.get("system_prompt_position", "system"),
         )
         agent.upstream = upstreams[upstream_id]
         agents[agent_id] = agent

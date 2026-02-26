@@ -36,10 +36,8 @@ def inject(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -
 
     messages = [m for m in raw_messages if m.get("role") != "system"]
 
-    if agent.system_prompt:
-        messages = [{"role": "system", "content": agent.system_prompt}] + messages
-
-    # Glossary injection
+    # Glossary injection - compute content regardless of position
+    glossary_system_text: str | None = None
     glossary_terms: list[dict] | None = None
     if agent.glossary:
         user_text = " ".join(
@@ -58,10 +56,30 @@ def inject(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -
                             glossary_terms.append({"source": form, "target": t.chinese})
                             seen.add(form)
             else:
-                # Standard mode: inject matched terms as a system message
-                glossary_msg = agent.glossary.build_system_message(matches)
-                insert_pos = 1 if agent.system_prompt else 0
-                messages.insert(insert_pos, {"role": "system", "content": glossary_msg})
+                # Standard mode: inject matched terms as a system message (position will be determined below)
+                glossary_system_text = agent.glossary.build_system_message(matches)
+
+    # Insert system_prompt + glossary based on position
+    if agent.system_prompt_position == "user_prefix":
+        # Prepend to first user message
+        parts = [p for p in [agent.system_prompt, glossary_system_text] if p]
+        if parts:
+            prefix = "\n\n".join(parts)
+            for i, msg in enumerate(messages):
+                if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+                    messages[i] = {**msg, "content": f"{prefix}\n\n{msg['content']}"}
+                    break
+            else:
+                # No user message found - fallback to system message
+                if agent.system_prompt:
+                    messages = [{"role": "system", "content": agent.system_prompt}] + messages
+    else:
+        # Default "system" mode: insert as system messages
+        if agent.system_prompt:
+            messages = [{"role": "system", "content": agent.system_prompt}] + messages
+        if glossary_system_text:
+            insert_pos = 1 if agent.system_prompt else 0
+            messages.insert(insert_pos, {"role": "system", "content": glossary_system_text})
 
     # 从客户端 body 复制其他字段，排除 messages / thinking / model
     result = {k: v for k, v in body.items() if k not in ("messages", "thinking", "model")}

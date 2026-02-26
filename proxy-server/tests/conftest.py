@@ -31,6 +31,7 @@ def make_agent(upstream: UpstreamConfig, **kwargs) -> AgentConfig:
         disable_thinking=None,
         extra_body={},
         force_non_stream=False,
+        system_prompt_position="system",
     )
     defaults.update(kwargs)
     a = AgentConfig(**defaults)
