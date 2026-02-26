@@ -111,12 +111,10 @@ async def _stream_response(url: str, headers: dict, body: dict, agent: AgentConf
         await client.aclose()
         raise HTTPException(status_code=resp.status_code, detail=error_body.decode())
 
-    raw_iter = resp.aiter_raw()
-
     async def gen():
         try:
             yield _meta_sse_chunk(agent)
-            async for chunk in raw_iter:
+            async for chunk in resp.aiter_raw():
                 if chunk:
                     yield chunk
         finally:
