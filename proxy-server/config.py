@@ -47,6 +47,7 @@ class TenantConfig:
     max_chars: Optional[int] = None
     upgrade_agent_id: Optional[str] = None
     upgrade_window: int = 600
+    upgrade_use_ip: bool = True
     agent: AgentConfig = field(init=False)
     upgrade_agent: Optional[AgentConfig] = field(init=False, default=None)
 
@@ -146,7 +147,8 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             max_user_messages=t.get("max_user_messages"),
             max_chars=t.get("max_chars"),
             upgrade_agent_id=upgrade_agent_id,
-            upgrade_window=t.get("upgrade_window", 15),
+            upgrade_window=t.get("upgrade_window", 600),
+            upgrade_use_ip=t.get("upgrade_use_ip", True),
         )
         tenant.agent = agents[agent_id]
         if upgrade_agent_id:

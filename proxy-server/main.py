@@ -81,9 +81,14 @@ async def chat_completions(request: Request, tenant: TenantConfig = Depends(get_
     body = await request.json()
 
     effective_agent = tenant.agent
-    if tenant.upgrade_agent and upgrade.check_and_record(used_key, body.get("messages", []), tenant.upgrade_window):
-        effective_agent = tenant.upgrade_agent
-        log.info(f"[{tenant.name}] repeat request within {tenant.upgrade_window}s -> upgrade to {tenant.upgrade_agent_id}")
+    if tenant.upgrade_agent:
+        client_ip: str | None = None
+        if tenant.upgrade_use_ip:
+            xff = request.headers.get("x-forwarded-for", "")
+            client_ip = xff.split(",")[0].strip() if xff else (request.client.host if request.client else None)
+        if upgrade.check_and_record(used_key, body.get("messages", []), tenant.upgrade_window, client_ip):
+            effective_agent = tenant.upgrade_agent
+            log.info(f"[{tenant.name}] repeat request within {tenant.upgrade_window}s -> upgrade to {tenant.upgrade_agent_id}")
 
     try:
         modified_body = inject(body, tenant, effective_agent)

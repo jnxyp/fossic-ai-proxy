@@ -41,20 +41,40 @@ def test_different_key_not_a_repeat():
 def test_expired_entry_not_a_repeat():
     _clear()
     past = time.monotonic() - 20
-    upgrade._cache[("sk-key", upgrade._messages_hash(MESSAGES))] = past
+    upgrade._cache[("sk-key", None, upgrade._messages_hash(MESSAGES))] = past
     assert upgrade.check_and_record("sk-key", MESSAGES, window=15) is False
 
 
 def test_repeat_within_window_is_detected():
     _clear()
     now = time.monotonic()
-    upgrade._cache[("sk-key", upgrade._messages_hash(MESSAGES))] = now - 5
+    upgrade._cache[("sk-key", None, upgrade._messages_hash(MESSAGES))] = now - 5
     assert upgrade.check_and_record("sk-key", MESSAGES, window=15) is True
 
 
 def test_expired_entries_pruned():
     _clear()
     past = time.monotonic() - 20
-    upgrade._cache[("sk-old", "hash")] = past
+    upgrade._cache[("sk-old", None, "hash")] = past
     upgrade.check_and_record("sk-key", MESSAGES, window=15)
-    assert ("sk-old", "hash") not in upgrade._cache
+    assert ("sk-old", None, "hash") not in upgrade._cache
+
+
+def test_different_ip_not_a_repeat():
+    _clear()
+    upgrade.check_and_record("sk-key", MESSAGES, window=15, client_ip="1.2.3.4")
+    assert upgrade.check_and_record("sk-key", MESSAGES, window=15, client_ip="5.6.7.8") is False
+
+
+def test_same_ip_is_repeat():
+    _clear()
+    upgrade.check_and_record("sk-key", MESSAGES, window=15, client_ip="1.2.3.4")
+    assert upgrade.check_and_record("sk-key", MESSAGES, window=15, client_ip="1.2.3.4") is True
+
+
+def test_no_ip_different_clients_trigger_each_other():
+    """When upgrade_use_ip=False (client_ip=None), all clients sharing a key
+    are treated as one — a request from any client counts as a repeat."""
+    _clear()
+    upgrade.check_and_record("sk-key", MESSAGES, window=15, client_ip=None)
+    assert upgrade.check_and_record("sk-key", MESSAGES, window=15, client_ip=None) is True
