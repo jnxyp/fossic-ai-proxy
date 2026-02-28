@@ -46,7 +46,7 @@ class TenantConfig:
     max_user_messages: Optional[int] = None
     max_chars: Optional[int] = None
     upgrade_agent_id: Optional[str] = None
-    upgrade_window: int = 15
+    upgrade_window: int = 600
     agent: AgentConfig = field(init=False)
     upgrade_agent: Optional[AgentConfig] = field(init=False, default=None)
 
