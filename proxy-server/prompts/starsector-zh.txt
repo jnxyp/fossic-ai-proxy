@@ -11,7 +11,7 @@
 
 ## 保留不翻译
 
-- 人名保持原样
+- 人名保持英文原文不翻译
 - 恒星/星系名、行星名保持原样；若为"恒星名+设施名"，只翻译设施部分
 - 以 `$` 开头的 Token 保持原样，且只能保留原文中已有的，**不得凭空添加**
   - 人称代词 Token（`$heOrShe`、`$hisOrHer`、`$himOrHer`、`$himOrHerself`、`$manOrWoman` 及同类 `$**_*` 形式）和 `$shipOrFleet`/`$**shipOrFleet` 前后**不**空格；其余 Token 前后空格（紧邻标点时除外）
