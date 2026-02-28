@@ -74,12 +74,10 @@ def inject(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -
                 if agent.system_prompt:
                     messages = [{"role": "system", "content": agent.system_prompt}] + messages
     else:
-        # Default "system" mode: insert as system messages
-        if agent.system_prompt:
-            messages = [{"role": "system", "content": agent.system_prompt}] + messages
-        if glossary_system_text:
-            insert_pos = 1 if agent.system_prompt else 0
-            messages.insert(insert_pos, {"role": "system", "content": glossary_system_text})
+        # Default "system" mode: merge system_prompt + glossary into a single system message
+        parts = [p for p in [agent.system_prompt, glossary_system_text] if p]
+        if parts:
+            messages = [{"role": "system", "content": "\n\n".join(parts)}] + messages
 
     # 从客户端 body 复制其他字段，排除 messages / thinking / model
     result = {k: v for k, v in body.items() if k not in ("messages", "thinking", "model")}

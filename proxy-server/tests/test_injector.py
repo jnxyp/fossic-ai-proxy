@@ -117,14 +117,16 @@ def test_max_chars_counts_all_roles(up, ag):
 
 # ── glossary injection ────────────────────────────────────────────────────────
 
-def test_glossary_injected_after_system_prompt(up):
+def test_glossary_merged_into_system_prompt(up):
     g = make_glossary_loader(("flux", "幅能", ""))
     t = make_tenant(make_agent(up, glossary=g))
     b = body(messages=[{"role": "user", "content": "Check the flux level."}])
     result = inject(b, t)
-    assert result["messages"][0]["role"] == "system"   # main system prompt
-    assert result["messages"][1]["role"] == "system"   # glossary
-    assert "flux" in result["messages"][1]["content"]
+    # system_prompt and glossary merged into a single system message
+    assert result["messages"][0]["role"] == "system"
+    assert result["messages"][1]["role"] == "user"
+    assert "You are a translator" in result["messages"][0]["content"]
+    assert "flux" in result["messages"][0]["content"]
 
 
 def test_glossary_not_injected_when_no_match(up):
