@@ -28,7 +28,7 @@ def make_agent(upstream: UpstreamConfig, **kwargs) -> AgentConfig:
         model="model-a",
         system_prompt="You are a translator.",
         glossary=None,
-        disable_thinking=None,
+        enable_thinking=None,
         extra_body={},
         force_non_stream=False,
         system_prompt_position="system",

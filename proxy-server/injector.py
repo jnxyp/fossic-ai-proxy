@@ -92,8 +92,8 @@ def inject(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -
         result["translation_options"] = {**result.get("translation_options", {}), "terms": glossary_terms}
 
     # 移除 Anthropic 格式的 thinking 字段，统一转换为 enable_thinking
-    if agent.disable_thinking is not None:
-        result["enable_thinking"] = not agent.disable_thinking
+    if agent.enable_thinking is not None:
+        result["enable_thinking"] = agent.enable_thinking
     else:
         thinking = body.get("thinking")
         if isinstance(thinking, dict):

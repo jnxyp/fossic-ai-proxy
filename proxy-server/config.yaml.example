@@ -14,7 +14,7 @@ agents:
     model: "gpt-4o-mini"
     system_prompt_file: "starsector-zh.txt"   # prompts/ 目录下的提示词文件
     glossary_file: "starsector-terms.json"    # glossary/ 目录下的术语表
-    disable_thinking: true                    # 可选，强制关闭/开启 thinking
+    enable_thinking: false                    # 可选，true/false 强制覆盖；未设置则透传用户请求
     # extra_body:                             # 可选，合并进请求体（agent 优先）
     #   translation_options:
     #     source_lang: "English"

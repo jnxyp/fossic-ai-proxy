@@ -338,14 +338,14 @@ def test_thinking_no_param_no_key(up, ag):
 
 
 def test_thinking_force_off_overrides_client(up):
-    t = make_tenant(make_agent(up, disable_thinking=True))
+    t = make_tenant(make_agent(up, enable_thinking=False))
     b = body(**{"thinking": {"type": "enabled"}})
     result = inject(b, t)
     assert result.get("enable_thinking") is False
 
 
 def test_thinking_force_on_overrides_client(up):
-    t = make_tenant(make_agent(up, disable_thinking=False))
+    t = make_tenant(make_agent(up, enable_thinking=True))
     b = body(**{"thinking": {"type": "disabled"}})
     result = inject(b, t)
     assert result.get("enable_thinking") is True

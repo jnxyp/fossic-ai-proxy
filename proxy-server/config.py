@@ -29,7 +29,7 @@ class AgentConfig:
     model: str
     system_prompt: str
     glossary: Optional[GlossaryLoader]
-    disable_thinking: Optional[bool]
+    enable_thinking: Optional[bool]
     extra_body: dict
     glossary_mode: Literal["system_message", "translation_options"] = "system_message"
     force_non_stream: bool = False
@@ -110,7 +110,7 @@ def load_config(path: str = "config.yaml") -> AppConfig:
             model=a["model"],
             system_prompt=system_prompt,
             glossary=glossary,
-            disable_thinking=a.get("disable_thinking"),
+            enable_thinking=a.get("enable_thinking"),
             extra_body=a.get("extra_body") or {},
             glossary_mode=a.get("glossary_mode", "system_message"),
             force_non_stream=bool(a.get("force_non_stream", False)),
