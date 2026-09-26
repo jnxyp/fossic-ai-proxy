@@ -31,4 +31,4 @@ tenants:
     allowed_referers:
       - "https://paratranz.cn/"
     max_user_messages: 1
-    max_chars: 5000
+    max_chars: 10000

@@ -6,8 +6,11 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import db
 import upgrade
@@ -50,8 +53,48 @@ def _cors_headers(origin: str, tenant: TenantConfig) -> dict:
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Authorization, Content-Type",
+            "Vary": "Origin",
         }
     return {}
+
+
+def _error_cors_headers(request: Request) -> dict:
+    if request.url.path != "/v1/chat/completions" or app_config is None:
+        return {}
+    origin = request.headers.get("origin", "")
+    scheme, _, key = request.headers.get("authorization", "").partition(" ")
+    tenant = app_config.tenants.get(key) if scheme.lower() == "bearer" else None
+    if tenant is not None:
+        return _cors_headers(origin, tenant)
+    # Authentication failures have no tenant; use the same allowlist as preflight.
+    for tenant in app_config.tenants.values():
+        headers = _cors_headers(origin, tenant)
+        if headers:
+            return headers
+    return {}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    response = await http_exception_handler(request, exc)
+    response.headers.update(_error_cors_headers(request))
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    response = await request_validation_exception_handler(request, exc)
+    response.headers.update(_error_cors_headers(request))
+    return response
+
+
+@app.exception_handler(Exception)
+async def internal_error(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+        headers=_error_cors_headers(request),
+    )
 
 
 @app.options("/v1/chat/completions")
@@ -64,6 +107,7 @@ async def chat_completions_preflight(request: Request):
             "Access-Control-Allow-Methods": "POST, OPTIONS",
             "Access-Control-Allow-Headers": "Authorization, Content-Type",
             "Access-Control-Max-Age": "86400",
+            "Vary": "Origin",
         })
     return Response(status_code=403)
 
