@@ -70,7 +70,7 @@ def _collect_stream(stream_resp) -> list[dict]:
                     if line.startswith("data: ") and not line.endswith("[DONE]"):
                         chunks.append(json.loads(line[6:]))
         return chunks
-    return asyncio.get_event_loop().run_until_complete(_drain())
+    return asyncio.run(_drain())
 
 
 def test_json_to_sse_stream_emits_meta_first():
@@ -102,5 +102,5 @@ def test_json_to_sse_stream_ends_with_done():
                 raw += chunk
         return raw
 
-    raw = asyncio.get_event_loop().run_until_complete(_check_done())
+    raw = asyncio.run(_check_done())
     assert b"data: [DONE]" in raw

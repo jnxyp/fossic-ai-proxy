@@ -36,6 +36,26 @@ def test_agent_model_used_when_client_omits_model(up, ag):
     assert result["model"] == "model-a"
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_native_thinking_overrides_client_switches(up, enabled):
+    native = {"type": "enabled" if enabled else "disabled"}
+    agent = make_agent(up, extra_body={"thinking": native, "reasoning_effort": "low"})
+    result = inject(body(thinking={"type": "disabled"}, enable_thinking=False,
+                         reasoning_effort="max", thinking_budget=2000), make_tenant(agent))
+    assert result["thinking"] == native
+    assert result["reasoning_effort"] == "low"
+    assert "enable_thinking" not in result
+    assert "thinking_budget" not in result
+
+
+def test_qwen_agent_budget_removes_client_effort(up):
+    agent = make_agent(up, enable_thinking=True, extra_body={"thinking_budget": 2000})
+    result = inject(body(reasoning_effort="max"), make_tenant(agent))
+    assert result["enable_thinking"] is True
+    assert result["thinking_budget"] == 2000
+    assert "reasoning_effort" not in result
+
+
 # ── system prompt injection ───────────────────────────────────────────────────
 
 def test_prepends_system_prompt(up):

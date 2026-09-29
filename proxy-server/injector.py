@@ -91,8 +91,10 @@ def inject(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -
     if glossary_terms is not None:
         result["translation_options"] = {**result.get("translation_options", {}), "terms": glossary_terms}
 
-    # 移除 Anthropic 格式的 thinking 字段，统一转换为 enable_thinking
-    if agent.enable_thinking is not None:
+    # Native thinking configuration (DeepSeek / GLM) wins over client switches.
+    if "thinking" in agent.extra_body:
+        result.pop("enable_thinking", None)
+    elif agent.enable_thinking is not None:
         result["enable_thinking"] = agent.enable_thinking
     else:
         thinking = body.get("thinking")
@@ -100,5 +102,11 @@ def inject(body: dict, tenant: TenantConfig, agent: AgentConfig | None = None) -
             result["enable_thinking"] = thinking.get("type") == "enabled"
         elif "enable_thinking" in body:
             result["enable_thinking"] = body["enable_thinking"]
+
+    # Qwen does not accept a budget and reasoning effort together.
+    if "reasoning_effort" in agent.extra_body:
+        result.pop("thinking_budget", None)
+    elif "thinking_budget" in agent.extra_body:
+        result.pop("reasoning_effort", None)
 
     return result

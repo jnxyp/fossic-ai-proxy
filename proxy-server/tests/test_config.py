@@ -292,7 +292,7 @@ def test_upgrade_agent_defaults_to_none(tmp_path):
     t = cfg.tenants["sk-abc"]
     assert t.upgrade_agent_id is None
     assert t.upgrade_agent is None
-    assert t.upgrade_window == 15
+    assert t.upgrade_window == 600
 
 
 def test_unknown_upgrade_agent_id_exits(tmp_path):

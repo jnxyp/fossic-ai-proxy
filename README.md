@@ -2,6 +2,8 @@
 
 一个面向翻译场景的 LLM API 代理系统，兼容 OpenAI `/v1/chat/completions` 接口。
 
+当前模型、默认/加强档映射与参数约定见 [翻译模型与路由](proxy-server/MODELS.md)。
+
 ## 组成
 
 ### [proxy-server](./proxy-server/)
